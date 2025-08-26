@@ -1,0 +1,50 @@
+# clone se ainda não tiver local
+cd ~
+[ ! -d naskanghost.github.io ] && git clone https://github.com/naskanghost/naskanghost.github.io.git
+cd naskanghost.github.io
+
+# cria/atualiza o arquivo "linux" na raiz (instalador)
+cat > linux <<'SH'
+#!/bin/sh -e
+{
+RC='\033[0m'; RED='\033[0;31m'
+check(){ ec=$1; msg=$2; if [ "$ec" -ne 0 ]; then printf "%b\n" "${RED}ERROR: $msg${RC}"; exit 1; fi; }
+
+arch_detect(){
+  case "$(uname -m)" in
+    x86_64|amd64) echo x86_64 ;;
+    aarch64|arm64) echo aarch64 ;;
+    *) echo x86_64 ;;
+  esac
+}
+
+ARCH="$(arch_detect)"
+BASE="https://github.com/naskanghost/ghostutils/releases/latest/download"
+URL="$BASE/ghostutils"
+[ "$ARCH, " != "x86_64" ] && URL="$URL-$ARCH"
+
+TMP="$(mktemp)"; check $? "mktemp"
+printf "%s\n" "-> Baixando: $URL"
+if curl -fsL "$URL" -o "$TMP"; then
+  chmod +x "$TMP"; check $? "chmod"
+  exec "$TMP" "$@"
+fi
+
+echo "Release não encontrado. Fallback: compilar via cargo."
+if command -v cargo >/dev/null 2>&1; then
+  WORK="${HOME}/ghostutils-src"
+  if [ ! -d "$WORK" ]; then
+    git clone https://github.com/naskanghost/ghostutils "$WORK" || { echo "git clone falhou"; exit 1; }
+  fi
+  cd "$WORK" && cargo build --release || { echo "build falhou"; exit 1; }
+  exec "$WORK/target/release/ghostutils" "$@"
+else
+  echo "Rust/Cargo não instalado. Instale via https://rustup.rs e rode novamente."
+  exit 1
+fi
+}
+SH
+
+git add linux
+git commit -m "feat: GhostUtils installer at /linux"
+git push
